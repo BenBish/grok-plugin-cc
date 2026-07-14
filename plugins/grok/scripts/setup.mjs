@@ -19,7 +19,12 @@
 import process from "node:process";
 import { readPluginConfig, writePluginConfig } from "./lib/plugin-config.mjs";
 import { buildProviderArgs, DEFAULT_BASE_URL } from "./lib/codex-config.mjs";
-import { checkCodexOnPath, runCodex, CodexNotFoundError } from "./lib/codex-run.mjs";
+import {
+  checkCodexOnPath,
+  runCodex,
+  CodexNotFoundError,
+  diagnoseKnownProviderFailure,
+} from "./lib/codex-run.mjs";
 import { jobLogPath } from "./lib/job-store.mjs";
 import { GROK_MODELS } from "./lib/models.mjs";
 
@@ -126,7 +131,8 @@ async function cmdSmokeTest() {
     process.exit(1);
   }
   if (result.exitCode !== 0) {
-    console.error(`Smoke test failed: ${result.errorDetail}\nFull log: ${logPath}`);
+    const errorDetail = diagnoseKnownProviderFailure(result.errorDetail) ?? result.errorDetail;
+    console.error(`Smoke test failed: ${errorDetail}\nFull log: ${logPath}`);
     process.exit(1);
   }
   console.log(`Smoke test passed. Model responded. Full log: ${logPath}`);

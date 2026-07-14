@@ -1,14 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isolatedEnv, runNode, runNodeExpectFailure } from "./helpers.mjs";
+import { fakeCodexBin, isolatedEnv, runNode, runNodeExpectFailure } from "./helpers.mjs";
 
-// setup.mjs's `smoke-test` command makes real network/process calls and is
-// intentionally left to manual verification (see this repo's README for
-// the wire_api spike) — these tests cover `configure`'s validation logic,
-// `show`, and `list-models`, where the actual (previously untested) bug
-// classes live: an unvalidated --api-key-env fed straight into a codex -c
-// TOML override, and a --model id=name parser that truncated names
-// containing "=".
+// setup.mjs's real `smoke-test` command makes network/process calls, but
+// the fake-codex fixture lets us cover deterministic provider-failure
+// diagnostics without a live xAI account. The other tests cover
+// `configure`'s validation logic, `show`, and `list-models`, where the
+// actual bug classes live: an unvalidated --api-key-env fed straight into
+// a codex -c TOML override, and a --model id=name parser that truncated
+// names containing "=".
 
 function freshEnv() {
   return isolatedEnv({ withPluginConfig: false }).env;
@@ -17,9 +17,7 @@ function freshEnv() {
 test("list-models: returns the fixed Grok model catalog", () => {
   const env = freshEnv();
   const listed = JSON.parse(runNode("setup.mjs", ["list-models"], { env }));
-  assert.ok(Array.isArray(listed.models));
-  assert.ok(listed.models.length > 0);
-  assert.ok(listed.models.every((m) => typeof m.id === "string" && typeof m.name === "string"));
+  assert.deepEqual(listed.models, [{ id: "grok-4.5", name: "Grok 4.5" }]);
 });
 
 test("configure: with a valid model and api-key-env succeeds and is readable via show", () => {
@@ -34,6 +32,24 @@ test("configure: with a valid model and api-key-env succeeds and is readable via
   assert.equal(shown.config.apiKeyEnvVar, "XAI_API_KEY");
   assert.equal(shown.config.defaultModel, "grok-4.5");
   assert.equal(shown.config.baseURL, "https://api.x.ai/v1");
+});
+
+test("smoke-test: explains the known Codex/xAI tool-schema incompatibility", () => {
+  const env = {
+    ...freshEnv(),
+    PATH: `${fakeCodexBin()}:${process.env.PATH}`,
+    FAKE_CODEX_MODE: "xai-namespace-wire-error",
+  };
+  runNode(
+    "setup.mjs",
+    ["configure", "--api-key-env", "XAI_API_KEY", "--model", "grok-4.5=Grok 4.5"],
+    { env },
+  );
+
+  const { stderr } = runNodeExpectFailure("setup.mjs", ["smoke-test"], { env });
+  assert.match(stderr, /Codex\/xAI Responses API tool-schema incompatibility/);
+  assert.match(stderr, /type: namespace/);
+  assert.match(stderr, /wire_api=chat/);
 });
 
 test("configure: missing --api-key-env is rejected", () => {

@@ -1,6 +1,6 @@
 ---
 name: grok-runtime
-description: How the grok-plugin-cc broker scripts work — job model, codex CLI delegation, the Grok/xAI provider wiring, and the open wire-format risk. Use when invoking or debugging the local-companion.mjs / setup.mjs / status.mjs / result.mjs / cancel.mjs scripts.
+description: How the grok-plugin-cc broker scripts work — job model, codex CLI delegation, the Grok/xAI provider wiring, and the known wire-format blocker. Use when invoking or debugging the local-companion.mjs / setup.mjs / status.mjs / result.mjs / cancel.mjs scripts.
 ---
 
 # grok-runtime
@@ -12,9 +12,8 @@ uses for local models), pointed at xAI's hosted API instead of a local
 server or an agent runtime of this plugin's own. Everything here describes
 that broker contract, including the constraints local-model-plugin-cc found
 by testing against a real local model — some of which are architectural
-(codex CLI's own behavior, not model-specific) and transfer unchanged, and
-one of which (`wire_api=responses`) is a genuinely open, unverified risk for
-a hosted, Chat-Completions-shaped API like xAI's.
+(codex CLI's own behavior, not model-specific) and transfer unchanged, plus
+the currently confirmed Codex/xAI Responses API tool-schema blocker.
 
 ## Job model
 
@@ -130,31 +129,30 @@ Grok. If Grok reviews come back suspiciously fast with confident-but-wrong
 findings, re-run that head-to-head comparison before assuming the prompt
 needs tuning instead.
 
-## Known open risks
+## Known blockers and risks
 
-- **`wire_api=responses` against xAI — the biggest unresolved risk in this
-  plugin.** local-model-plugin-cc only verified this override end-to-end
-  against Ollama/LM Studio's OpenAI-compatible endpoints (`wire_api="chat"`
-  is deprecated/rejected by current codex versions, so `"responses"` is the
-  only option codex accepts). xAI's public API is documented as
-  Chat-Completions-shaped, not the newer Responses API shape. This has
-  **not yet been confirmed to work end-to-end against a real xAI account**
-  — run the manual spike in this repo's README with a real `XAI_API_KEY`
-  before relying on this plugin for real work. If it fails: garbled or
-  empty output despite exit code 0, or an explicit rejection of the
-  `wire_api` value, are both signs of a wire-format mismatch — don't assume
-  the broker's own code is at fault, and don't guess a fix; record the
-  actual failure here.
+- **Codex/xAI Responses API tool-schema incompatibility — current blocker.**
+  Codex 0.142.0 accepts only `wire_api=responses` for custom providers
+  (`wire_api="chat"` is rejected at config-load time). With xAI's
+  `/v1/responses` endpoint, Codex reaches the provider, but xAI rejects
+  Codex's current agent tool declaration with a 422 like `unknown variant
+  namespace`, because the serialized tool shape does not match xAI's
+  accepted schema. This is not model-specific; switching from a bad model id
+  to `grok-4.5` still fails the same way. Do not keep retrying setup or
+  guess alternate `wire_api` values — the plugin cannot run Grok
+  reviews/rescues through Codex until Codex or xAI supports a compatible
+  tool schema.
 - The rate-limit retry heuristic (`lib/retry.mjs`) is a string match on
   codex's last error message, not a structured status code — codex doesn't
   expose one. If xAI's actual 429 error text doesn't contain anything
   matching `/429|rate.?limit|too many requests/i`, retries silently won't
   fire; if this comes up, widen the pattern based on the real error text
   observed in a job's log file rather than guessing.
-- The fixed model catalog in `lib/models.mjs` was **not verified** against
-  xAI's actual API/docs at implementation time — confirm the real model-id
-  strings (`https://docs.x.ai/docs/models`) before trusting the defaults
-  `/grok:setup` suggests.
+- The fixed model catalog in `lib/models.mjs` intentionally includes only
+  `grok-4.5`, the documented text model in xAI's model docs
+  (`https://docs.x.ai/docs/models`). If a user configures a custom model id
+  through `/grok:setup`, confirm that custom id against the live API before
+  trusting it.
 - Cost: unlike a local model, every `/grok:rescue`/`/grok:review` run is
   billed against the configured xAI account. `/grok:rescue` in particular
   can run up to 15 minutes and is gated behind an explicit user

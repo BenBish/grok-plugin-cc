@@ -131,6 +131,19 @@ function main() {
       process.exit(1);
       break;
     }
+    case "xai-namespace-wire-error": {
+      emit({
+        type: "item.completed",
+        item: {
+          id: "item_0",
+          type: "error",
+          message:
+            "unexpected status 422 Unprocessable Entity: {\"error\":\"Failed to deserialize the JSON body into the target type: unknown variant `namespace`, expected one of `function`, `web_search`, `x_search`, `image_generation`, `collections_search`, `file_search`, `code_execution`, `code_interpreter`, `mcp`, `shell`\"}, url: https://api.x.ai/v1/responses",
+        },
+      });
+      process.exit(1);
+      break;
+    }
     case "rescue-safe": {
       fs.writeFileSync(path.join(args.dir, "rescued.txt"), "fixed by fake codex\n");
       writeOutput(args, "Added rescued.txt.");
