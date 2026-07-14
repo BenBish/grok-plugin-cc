@@ -1,0 +1,21 @@
+{
+  "name": "grok",
+  "owner": {
+    "name": "Ben Bishop"
+  },
+  "metadata": {
+    "description": "Delegate reviews and rescue work from Claude Code to Grok 4.5 (via xAI's API) using the codex CLI.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "grok",
+      "description": "Use Grok 4.5 from Claude Code to review code or delegate tasks.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Ben Bishop"
+      },
+      "source": "./plugins/grok"
+    }
+  ]
+}
