@@ -32,12 +32,11 @@ directly from this git repo — every file under `plugins/grok/` must be
 runnable as committed, since installing the plugin does not run `npm install` or
 any build in the target user's environment.
 
-Runtime peer dependency: the `codex` CLI must be on the end user's `PATH`.
-`/grok:setup` checks for it and guides installation; nothing in this repo vendors
-or auto-installs it. A real xAI API key is also required at runtime (never committed;
-only its env var name is stored) — see README.md's "Verify before relying on this"
-section for the one open risk (`wire_api=responses` against xAI) worth checking
-before real use.
+Runtime peer dependency: the `grok` CLI (Grok Build CLI) must be on the end user's
+`PATH`. `/grok:setup` checks for it and guides installation; nothing in this repo
+vendors or auto-installs it. A working `grok login` session (or another auth method
+the CLI supports directly) is also required at runtime — see README.md's "Verify
+before relying on this" section for a smoke test to run before real use.
 
 ### Linear MCP
 

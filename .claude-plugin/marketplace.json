@@ -4,7 +4,7 @@
     "name": "Ben Bishop"
   },
   "metadata": {
-    "description": "Delegate reviews and rescue work from Claude Code to Grok 4.5 (via xAI's API) using the codex CLI.",
+    "description": "Delegate reviews and rescue work from Claude Code to Grok 4.5 (via xAI's API) using the Grok Build CLI.",
     "version": "0.1.0"
   },
   "plugins": [
