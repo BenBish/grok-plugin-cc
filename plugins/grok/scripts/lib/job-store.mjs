@@ -161,7 +161,7 @@ function writeNewJob({ repoId, repoRoot, kind, mutating, model, agent, target })
     agent: agent ?? null,
     target: target ?? null,
     pid: null,
-    codexSessionId: null,
+    grokSessionId: null,
     logPath: jobLogPath(repoId, id),
     resultPath: null,
     error: null,

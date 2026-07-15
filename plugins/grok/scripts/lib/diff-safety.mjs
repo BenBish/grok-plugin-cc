@@ -9,9 +9,8 @@ import path from "node:path";
 // outside it) but structurally unable to observe a write that landed
 // entirely outside the repo tree (e.g. via a raw absolute-path write). That
 // class of escape can only be prevented at the point of the write itself —
-// i.e. by codex's own sandbox (`-s workspace-write`, OS-level) — which is
-// exactly why this module is defense-in-depth, not a complete substitute
-// for it.
+// i.e. by Grok's workspace sandbox/permission layer — which is exactly why
+// this module is defense-in-depth, not a complete substitute for it.
 const MAX_FILE_BYTES = 2 * 1024 * 1024; // 2 MiB
 const BINARY_SNIFF_BYTES = 8000;
 
@@ -145,12 +144,8 @@ function resolveInsideRoot(repoRoot, relPath) {
 
 // `git status` never reports paths under `.git/` in the first place (it's
 // repository metadata, not worktree content), so this check is a cheap
-// no-op safety net, not the real defense. Empirically, codex's
-// `workspace-write` sandbox itself refuses writes under `.git/` regardless
-// of sandbox mode (verified directly: a normal in-repo write succeeded, a
-// targeted `.git/hooks/` write was consistently refused even under a direct
-// forceful instruction) — but that isn't documented behavior we can cite,
-// so keep this check as a second layer rather than removing it.
+// no-op safety net, not the real defense. Keep this check as a second
+// layer in case a future tool path reports metadata paths unexpectedly.
 function assertNotGitInternal(relPath) {
   const normalized = relPath.split(path.sep).join("/");
   if (normalized === ".git" || normalized.startsWith(".git/")) {

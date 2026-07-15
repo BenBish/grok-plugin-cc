@@ -10,28 +10,19 @@
 // to stdout, matching codex-plugin-cc's "return companion script stdout
 // verbatim" convention for the calling slash command.
 //
-// Delegates to the `codex` CLI's own provider support (-c
-// model_providers.* overrides pointed at xAI's hosted API) rather than
-// reimplementing a provider/tool-loop runtime — the same architecture
-// local-model-plugin-cc uses for its "custom OpenAI-compatible endpoint"
-// mode, just always-hosted. See lib/codex-config.mjs for the provider
-// wiring and its open wire-format risk.
+// Delegates to Grok Build's own headless CLI rather than routing xAI
+// through Codex provider overrides.
 
+import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import process from "node:process";
 import { resolveRepoRoot, repoId as computeRepoId, NotAGitRepoError } from "./lib/repo-identity.mjs";
 import { readPluginConfig } from "./lib/plugin-config.mjs";
-import { buildProviderArgs, PROVIDER_ID } from "./lib/codex-config.mjs";
 import { createJob, updateJob, getJob, ConcurrentMutationError } from "./lib/job-store.mjs";
 import { jobsDir } from "./lib/paths.mjs";
 import { atomicWriteJson } from "./lib/fs-utils.mjs";
-import {
-  runCodex,
-  spawnDetachedWorker,
-  checkCodexOnPath,
-  CodexNotFoundError,
-  diagnoseKnownProviderFailure,
-} from "./lib/codex-run.mjs";
+import { runGrok, spawnDetachedWorker, checkGrokOnPath, GrokNotFoundError } from "./lib/grok-run.mjs";
 import { validateReviewOutput, extractJsonBlock } from "./lib/schema-validate.mjs";
 import { snapshotRepoState, validateChanges, DiffSafetyError } from "./lib/diff-safety.mjs";
 import { buildReviewPrompt, buildAdversarialReviewPrompt, buildRescuePrompt } from "./lib/prompts.mjs";
@@ -48,10 +39,13 @@ const RETRY_BASE_DELAY_MS = process.env.GROK_RETRY_BASE_DELAY_MS
   ? Number(process.env.GROK_RETRY_BASE_DELAY_MS)
   : 2000;
 
-// Both proven equivalent empirically (a real write attempt blocked either
-// way); `-c` used for review just because that's what got tested first.
-const REVIEW_SANDBOX_ARGS = ["-c", "sandbox_mode=read-only"];
-const RESCUE_SANDBOX_ARGS = ["-s", "workspace-write"];
+const REVIEW_MAX_TURNS = 6;
+const RESCUE_MAX_TURNS = 12;
+const REVIEW_DENY_RULES = ["Write(*)", "Edit(*)"];
+const REVIEW_SCHEMA = fs.readFileSync(
+  fileURLToPath(new URL("../schemas/review-output.schema.json", import.meta.url)),
+  "utf8",
+);
 
 function resultPath(repoIdValue, jobId) {
   return path.join(jobsDir(), repoIdValue, `${jobId}.result.json`);
@@ -92,7 +86,6 @@ async function runReviewJob({ job, repoRoot, repoIdValue, kind, args, config }) 
     kind === "adversarial-review"
       ? buildAdversarialReviewPrompt(job.target, args.focus)
       : buildReviewPrompt(job.target);
-  const providerArgs = buildProviderArgs(config);
 
   // Shared across the initial call, its rate-limit retries, and the
   // schema-invalid retry below, so all of them together can never exceed
@@ -103,13 +96,17 @@ async function runReviewJob({ job, repoRoot, repoIdValue, kind, args, config }) 
 
   let runResult = await withRateLimitRetry(
     () =>
-      runCodex({
+      runGrok({
         dir: repoRoot,
-        providerArgs,
-        sandboxArgs: REVIEW_SANDBOX_ARGS,
         prompt,
         logPath: job.logPath,
         timeoutMs: REVIEW_TIMEOUT_MS,
+        model: config.defaultModel,
+        maxTurns: REVIEW_MAX_TURNS,
+        sandbox: "read-only",
+        permissionMode: "bypassPermissions",
+        denyRules: REVIEW_DENY_RULES,
+        jsonSchema: REVIEW_SCHEMA,
       }),
     { deadline, baseDelayMs: RETRY_BASE_DELAY_MS },
   );
@@ -119,16 +116,15 @@ async function runReviewJob({ job, repoRoot, repoIdValue, kind, args, config }) 
     return output({ error: "timed out" });
   }
   if (runResult.exitCode !== 0) {
-    const errorDetail = diagnoseKnownProviderFailure(runResult.errorDetail) ?? runResult.errorDetail;
     updateJob(repoIdValue, job.id, {
       status: "failed",
-      error: errorDetail,
-      codexSessionId: runResult.sessionId,
+      error: runResult.errorDetail,
+      grokSessionId: runResult.sessionId,
     });
-    return output({ error: errorDetail });
+    return output({ error: runResult.errorDetail });
   }
 
-  let structured = runResult.text ? extractJsonBlock(runResult.text) : null;
+  let structured = runResult.structuredOutput ?? (runResult.text ? extractJsonBlock(runResult.text) : null);
   let validation = structured
     ? validateReviewOutput(structured)
     : { valid: false, errors: ["no JSON object found in model output"] };
@@ -139,14 +135,13 @@ async function runReviewJob({ job, repoRoot, repoIdValue, kind, args, config }) 
       updateJob(repoIdValue, job.id, {
         status: "failed",
         error: `Timed out after ${REVIEW_TIMEOUT_MS}ms (no budget left for the schema-invalid retry)`,
-        codexSessionId: runResult.sessionId,
+        grokSessionId: runResult.sessionId,
       });
       return output({ error: "timed out" });
     }
     // No session-resume dependency: a fresh call with the validation
-    // errors folded into the prompt. No --output-schema here (see
-    // codex-run.mjs) — schema conformance is prompt-only, so this retry
-    // path is the real safety net, not a rare edge case.
+    // errors folded into the prompt. Grok also receives the same JSON
+    // schema again so `structuredOutput` remains the primary path.
     const retryPrompt = [
       prompt,
       "IMPORTANT: your previous response did not match the required schema. Errors:",
@@ -155,13 +150,17 @@ async function runReviewJob({ job, repoRoot, repoIdValue, kind, args, config }) 
     ].join("\n\n");
     runResult = await withRateLimitRetry(
       () =>
-        runCodex({
+        runGrok({
           dir: repoRoot,
-          providerArgs,
-          sandboxArgs: REVIEW_SANDBOX_ARGS,
           prompt: retryPrompt,
           logPath: job.logPath,
           timeoutMs: remainingMs,
+          model: config.defaultModel,
+          maxTurns: REVIEW_MAX_TURNS,
+          sandbox: "read-only",
+          permissionMode: "bypassPermissions",
+          denyRules: REVIEW_DENY_RULES,
+          jsonSchema: REVIEW_SCHEMA,
         }),
       { deadline, baseDelayMs: RETRY_BASE_DELAY_MS },
     );
@@ -172,7 +171,7 @@ async function runReviewJob({ job, repoRoot, repoIdValue, kind, args, config }) 
       });
       return output({ error: "timed out" });
     }
-    structured = runResult.text ? extractJsonBlock(runResult.text) : null;
+    structured = runResult.structuredOutput ?? (runResult.text ? extractJsonBlock(runResult.text) : null);
     validation = structured
       ? validateReviewOutput(structured)
       : { valid: false, errors: ["no JSON object found in model output"] };
@@ -185,7 +184,7 @@ async function runReviewJob({ job, repoRoot, repoIdValue, kind, args, config }) 
       status: "failed",
       error: `Model output did not match schema: ${validation.errors.join("; ")}`,
       resultPath: resultFile,
-      codexSessionId: runResult.sessionId,
+      grokSessionId: runResult.sessionId,
     });
     return output({ error: "invalid model output", errors: validation.errors });
   }
@@ -194,7 +193,7 @@ async function runReviewJob({ job, repoRoot, repoIdValue, kind, args, config }) 
   updateJob(repoIdValue, job.id, {
     status: "completed",
     resultPath: resultFile,
-    codexSessionId: runResult.sessionId,
+    grokSessionId: runResult.sessionId,
   });
   output(structured);
 }
@@ -212,13 +211,15 @@ async function runRescueJob({ job, repoRoot, repoIdValue, args, config }) {
 
   const runResult = await withRateLimitRetry(
     () =>
-      runCodex({
+      runGrok({
         dir: repoRoot,
-        providerArgs: buildProviderArgs(config),
-        sandboxArgs: RESCUE_SANDBOX_ARGS,
         prompt,
         logPath: job.logPath,
         timeoutMs: RESCUE_TIMEOUT_MS,
+        model: config.defaultModel,
+        maxTurns: RESCUE_MAX_TURNS,
+        sandbox: "workspace",
+        permissionMode: "bypassPermissions",
       }),
     { deadline, baseDelayMs: RETRY_BASE_DELAY_MS },
   );
@@ -228,13 +229,12 @@ async function runRescueJob({ job, repoRoot, repoIdValue, args, config }) {
     return output({ error: "timed out" });
   }
   if (runResult.exitCode !== 0) {
-    const errorDetail = diagnoseKnownProviderFailure(runResult.errorDetail) ?? runResult.errorDetail;
     updateJob(repoIdValue, job.id, {
       status: "failed",
-      error: errorDetail,
-      codexSessionId: runResult.sessionId,
+      error: runResult.errorDetail,
+      grokSessionId: runResult.sessionId,
     });
-    return output({ error: errorDetail });
+    return output({ error: runResult.errorDetail });
   }
 
   let safety;
@@ -245,7 +245,7 @@ async function runRescueJob({ job, repoRoot, repoIdValue, args, config }) {
       updateJob(repoIdValue, job.id, {
         status: "failed",
         error: `Rejected: ${err.message}`,
-        codexSessionId: runResult.sessionId,
+        grokSessionId: runResult.sessionId,
       });
       return output({ error: err.message, code: err.code });
     }
@@ -266,7 +266,7 @@ async function runRescueJob({ job, repoRoot, repoIdValue, args, config }) {
   updateJob(repoIdValue, job.id, {
     status: "completed",
     resultPath: resultFile,
-    codexSessionId: runResult.sessionId,
+    grokSessionId: runResult.sessionId,
   });
   output(result);
 }
@@ -315,9 +315,9 @@ async function main() {
   const config = requireConfig();
 
   try {
-    checkCodexOnPath();
+    checkGrokOnPath();
   } catch (err) {
-    if (err instanceof CodexNotFoundError) fail(err.message);
+    if (err instanceof GrokNotFoundError) fail(err.message);
     throw err;
   }
 
@@ -334,7 +334,7 @@ async function main() {
       repoRoot,
       kind,
       mutating,
-      model: `${PROVIDER_ID}:${config.defaultModel}`,
+      model: `grok:${config.defaultModel}`,
       agent: mutating ? "grok-rescue" : "grok-review",
       target: args.base ? { base: args.base } : null,
     });

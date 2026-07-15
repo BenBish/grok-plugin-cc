@@ -5,49 +5,49 @@
 // commands generally use (the .md file is the interactive part; scripts do
 // deterministic work).
 //
-// Unlike local-model-plugin-cc, there is no `detect` step: Grok 4.5 is a
-// hosted API, not a local server — there's nothing to discover on a
-// loopback port. Configuration always requires an API key env var name and
-// always picks a model from a small fixed catalog (see models.mjs).
+// This setup validates Grok Build CLI access. Authentication is handled by
+// `grok login` (or by environment recognized by the Grok CLI), not by
+// storing an API key env var in this plugin's config.
 //
 //   node setup.mjs list-models
-//   node setup.mjs configure --api-key-env <VAR> [--base-url <url>] \
-//     --model <id>[=<display name>] [--model <id2>...] [--default-model <id>]
+//   node setup.mjs configure [--model <id>[=<display name>]] [--default-model <id>]
 //   node setup.mjs show
 //   node setup.mjs smoke-test
 
 import process from "node:process";
+import { spawnSync } from "node:child_process";
 import { readPluginConfig, writePluginConfig } from "./lib/plugin-config.mjs";
-import { buildProviderArgs, DEFAULT_BASE_URL } from "./lib/codex-config.mjs";
-import {
-  checkCodexOnPath,
-  runCodex,
-  CodexNotFoundError,
-  diagnoseKnownProviderFailure,
-} from "./lib/codex-run.mjs";
+import { checkGrokOnPath, runGrok, GrokNotFoundError } from "./lib/grok-run.mjs";
 import { jobLogPath } from "./lib/job-store.mjs";
-import { GROK_MODELS } from "./lib/models.mjs";
+import { DEFAULT_MODEL_ID, GROK_MODELS } from "./lib/models.mjs";
 
-// apiKeyEnvVar is interpolated directly into a codex `-c
-// model_providers.<id>.env_key=<value>` TOML override (see
-// codex-config.mjs) — not passed through a shell, so this isn't a
-// shell-injection concern, but an unvalidated name containing "=" would
-// break codex's own key=value parsing of the -c flag. Rejecting anything
-// but a safe identifier here, before it's ever persisted, turns that into a
-// clear error at configure time instead of a confusing codex failure later.
-const SAFE_ENV_VAR_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+function displayNameForModel(id) {
+  return id
+    .split(/[-_]/)
+    .map((part) => (part ? part[0].toUpperCase() + part.slice(1) : part))
+    .join(" ");
+}
+
+function discoverGrokModels() {
+  const result = spawnSync("grok", ["models"], { encoding: "utf8" });
+  if (result.status !== 0) return GROK_MODELS;
+  const models = [];
+  for (const line of result.stdout.split("\n")) {
+    const match = line.match(/^\s*\*\s+([A-Za-z0-9._-]+)/);
+    if (match) models.push({ id: match[1], name: displayNameForModel(match[1]) });
+  }
+  return models.length > 0 ? models : GROK_MODELS;
+}
 
 function cmdListModels() {
-  console.log(JSON.stringify({ models: GROK_MODELS }, null, 2));
+  console.log(JSON.stringify({ models: discoverGrokModels() }, null, 2));
 }
 
 function parseConfigureArgs(argv) {
   const args = { models: [] };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === "--api-key-env") args.apiKeyEnvVar = argv[++i];
-    else if (arg === "--base-url") args.baseURL = argv[++i];
-    else if (arg === "--default-model") args.defaultModel = argv[++i];
+    if (arg === "--default-model") args.defaultModel = argv[++i];
     else if (arg === "--model") {
       // Split on the first "=" only — String.split("=") would silently
       // truncate a display name that itself contains "=".
@@ -63,28 +63,13 @@ function parseConfigureArgs(argv) {
 
 function cmdConfigure(argv) {
   const args = parseConfigureArgs(argv);
-  if (!args.apiKeyEnvVar) {
-    console.error(
-      "--api-key-env is required (the name of an env var holding your xAI API key, e.g. XAI_API_KEY — never pass the literal key).",
-    );
-    process.exit(1);
-  }
-  if (!SAFE_ENV_VAR_NAME.test(args.apiKeyEnvVar)) {
-    console.error(
-      `--api-key-env must be a valid environment variable name (${SAFE_ENV_VAR_NAME}): got ${JSON.stringify(args.apiKeyEnvVar)}`,
-    );
-    process.exit(1);
-  }
-  if (args.models.length === 0) {
-    console.error("At least one --model <id> is required (see `node setup.mjs list-models`).");
-    process.exit(1);
-  }
+  const models = args.models.length > 0 ? args.models : discoverGrokModels();
+  const defaultModel = args.defaultModel ?? models[0]?.id ?? DEFAULT_MODEL_ID;
 
   const config = {
-    baseURL: args.baseURL || DEFAULT_BASE_URL,
-    apiKeyEnvVar: args.apiKeyEnvVar,
-    models: args.models,
-    defaultModel: args.defaultModel ?? args.models[0].id,
+    authMode: "grok-login",
+    models,
+    defaultModel,
     configuredAt: new Date().toISOString(),
   };
   writePluginConfig(config);
@@ -107,9 +92,9 @@ async function cmdSmokeTest() {
     process.exit(1);
   }
   try {
-    checkCodexOnPath();
+    checkGrokOnPath();
   } catch (err) {
-    if (err instanceof CodexNotFoundError) {
+    if (err instanceof GrokNotFoundError) {
       console.error(err.message);
       process.exit(1);
     }
@@ -117,13 +102,14 @@ async function cmdSmokeTest() {
   }
 
   const logPath = jobLogPath("setup-smoke-test", `smoke-${Date.now()}`);
-  const result = runCodex({
+  const result = runGrok({
     dir: process.cwd(),
-    providerArgs: buildProviderArgs(config),
-    sandboxArgs: ["-c", "sandbox_mode=read-only"],
-    prompt: "Reply with exactly the single word: ok",
+    prompt: 'Reply with exactly the JSON object {"ok":true}.',
     logPath,
     timeoutMs: 30_000,
+    model: config.defaultModel,
+    maxTurns: 1,
+    sandbox: "read-only",
   });
 
   if (result.timedOut) {
@@ -131,11 +117,17 @@ async function cmdSmokeTest() {
     process.exit(1);
   }
   if (result.exitCode !== 0) {
-    const errorDetail = diagnoseKnownProviderFailure(result.errorDetail) ?? result.errorDetail;
-    console.error(`Smoke test failed: ${errorDetail}\nFull log: ${logPath}`);
+    console.error(`Smoke test failed: ${result.errorDetail}\nFull log: ${logPath}`);
     process.exit(1);
   }
-  console.log(`Smoke test passed. Model responded. Full log: ${logPath}`);
+  try {
+    const response = JSON.parse(result.text ?? "");
+    if (response.ok !== true) throw new Error("missing ok:true");
+  } catch {
+    console.error(`Smoke test failed: Grok returned malformed smoke-test output.\nFull log: ${logPath}`);
+    process.exit(1);
+  }
+  console.log(`Smoke test passed. Grok responded. Full log: ${logPath}`);
 }
 
 async function main() {

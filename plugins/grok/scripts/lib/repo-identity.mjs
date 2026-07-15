@@ -7,7 +7,7 @@ export class NotAGitRepoError extends Error {}
 
 /**
  * Resolve the real (symlink-free) git top-level path for `cwd`. This is the
- * repo-identity anchor everywhere in the broker: job ledger keys, codex's
+ * repo-identity anchor everywhere in the broker: job ledger keys, Grok's
  * `-C`, and the diff-safety containment checks all use this value, never
  * the raw cwd string.
  */
