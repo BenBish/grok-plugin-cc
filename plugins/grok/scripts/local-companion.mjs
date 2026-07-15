@@ -25,7 +25,13 @@ import { buildProviderArgs, PROVIDER_ID } from "./lib/codex-config.mjs";
 import { createJob, updateJob, getJob, ConcurrentMutationError } from "./lib/job-store.mjs";
 import { jobsDir } from "./lib/paths.mjs";
 import { atomicWriteJson } from "./lib/fs-utils.mjs";
-import { runCodex, spawnDetachedWorker, checkCodexOnPath, CodexNotFoundError } from "./lib/codex-run.mjs";
+import {
+  runCodex,
+  spawnDetachedWorker,
+  checkCodexOnPath,
+  CodexNotFoundError,
+  diagnoseKnownProviderFailure,
+} from "./lib/codex-run.mjs";
 import { validateReviewOutput, extractJsonBlock } from "./lib/schema-validate.mjs";
 import { snapshotRepoState, validateChanges, DiffSafetyError } from "./lib/diff-safety.mjs";
 import { buildReviewPrompt, buildAdversarialReviewPrompt, buildRescuePrompt } from "./lib/prompts.mjs";
@@ -113,12 +119,13 @@ async function runReviewJob({ job, repoRoot, repoIdValue, kind, args, config }) 
     return output({ error: "timed out" });
   }
   if (runResult.exitCode !== 0) {
+    const errorDetail = diagnoseKnownProviderFailure(runResult.errorDetail) ?? runResult.errorDetail;
     updateJob(repoIdValue, job.id, {
       status: "failed",
-      error: runResult.errorDetail,
+      error: errorDetail,
       codexSessionId: runResult.sessionId,
     });
-    return output({ error: runResult.errorDetail });
+    return output({ error: errorDetail });
   }
 
   let structured = runResult.text ? extractJsonBlock(runResult.text) : null;
@@ -221,12 +228,13 @@ async function runRescueJob({ job, repoRoot, repoIdValue, args, config }) {
     return output({ error: "timed out" });
   }
   if (runResult.exitCode !== 0) {
+    const errorDetail = diagnoseKnownProviderFailure(runResult.errorDetail) ?? runResult.errorDetail;
     updateJob(repoIdValue, job.id, {
       status: "failed",
-      error: runResult.errorDetail,
+      error: errorDetail,
       codexSessionId: runResult.sessionId,
     });
-    return output({ error: runResult.errorDetail });
+    return output({ error: errorDetail });
   }
 
   let safety;

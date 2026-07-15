@@ -7,12 +7,10 @@
 // repo's oss/custom split, Grok has no local/no-auth case, so there is only
 // one mode here and `env_key` is always required, never optional.
 //
-// KNOWN RISK, not yet resolved: `wire_api=responses` was only verified
-// end-to-end against Ollama/LM Studio's OpenAI-compatible endpoints in
-// local-model-plugin-cc (`wire_api="chat"` is deprecated/rejected by
-// current codex versions). xAI's public API is documented as
-// Chat-Completions-shaped, not the newer Responses API shape — run the
-// manual spike in this repo's README before relying on this for real work.
+// KNOWN BLOCKER, not model-specific: current codex versions reject
+// `wire_api="chat"` at config-load time, so `responses` is the only value
+// this provider can pass. Codex reaches xAI's /v1/responses endpoint, but
+// xAI rejects Codex's current agent tool declaration (`type: namespace`).
 // See plugins/grok/skills/grok-runtime/SKILL.md for the full writeup.
 //
 // The provider id is always `grok-xai` (not user-chosen): codex rejects

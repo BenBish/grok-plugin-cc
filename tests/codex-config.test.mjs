@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { buildProviderArgs, PROVIDER_ID, DEFAULT_BASE_URL } from "../plugins/grok/scripts/lib/codex-config.mjs";
 
-test("buildProviderArgs: builds -c model_providers.* overrides with wire_api=responses", () => {
+test("buildProviderArgs: builds -c model_providers.* overrides with Codex's required responses wire API", () => {
   const args = buildProviderArgs({
     apiKeyEnvVar: "XAI_API_KEY",
     defaultModel: "grok-4.5",

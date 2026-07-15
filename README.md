@@ -25,12 +25,12 @@ repo doesn't hardcode numbers that will drift. Rate-limit (429) errors are
 retried with capped exponential backoff (`lib/retry.mjs`) — a heuristic
 string match, since `codex` exposes no structured HTTP status.
 
-**Known open risk:** the `wire_api=responses` override this plugin passes
-to `codex` was only verified end-to-end against Ollama/LM Studio in
-`local-model-plugin-cc`; xAI's public API is documented as
-Chat-Completions-shaped, not the newer Responses API shape. This has not
-yet been confirmed against a real xAI account — see "Verify before relying
-on this" below, and
+**Known blocker:** Codex 0.142.0 reaches xAI's `/v1/responses` endpoint
+with `wire_api=responses`, but xAI rejects Codex's current agent tool
+declaration (`type: namespace`) with a 422. Codex also rejects
+`wire_api=chat`, so this plugin cannot currently run Grok review/rescue
+jobs through Codex until Codex or xAI supports a compatible tool schema.
+See "Verify before relying on this" below and
 `plugins/grok/skills/grok-runtime/SKILL.md` for the full writeup.
 
 ## Commands
@@ -73,14 +73,16 @@ XAI_API_KEY=... codex exec \
   "reply with exactly: ok"
 ```
 
-If this fails in a way that looks wire-format-related (garbled/empty output
-despite exit code 0, or a rejected `wire_api` value), don't assume the
-plugin's code is at fault — see
-`plugins/grok/skills/grok-runtime/SKILL.md`'s "Known open risks" section.
+If this fails with `unknown variant namespace`, you have hit the confirmed
+Codex/xAI Responses API tool-schema incompatibility. This is not fixed by
+switching to `wire_api=chat`; current Codex rejects that setting before the
+request is sent. See `plugins/grok/skills/grok-runtime/SKILL.md`'s "Known
+blockers and risks" section.
 
-Also verify the model-id strings in `plugins/grok/scripts/lib/models.mjs`
-against [xAI's model docs](https://docs.x.ai/docs/models) — they were not
-confirmed against a live API at the time this plugin was written.
+The built-in setup catalog intentionally includes only `grok-4.5`, the
+documented text model in [xAI's model docs](https://docs.x.ai/docs/models).
+If you configure a custom model id, verify that custom id against the live
+API before relying on it.
 
 ## What's here
 

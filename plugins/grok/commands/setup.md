@@ -42,13 +42,14 @@ hosted API, not a server on your machine.
    https://developers.openai.com/codex/cli), the API key env var to be set
    in the user's shell, and sends a trivial prompt to the configured model
    through `codex exec` to confirm the whole path works end to end,
-   including the `wire_api=responses` override against xAI's API (see
-   `plugins/grok/skills/grok-runtime/SKILL.md` for why this is the one
-   genuinely open risk in this plugin). Report the pass/fail result to the
-   user plainly, including the log path on failure so they can see what
-   codex actually said. If it fails in a way that looks wire-format-related
-   (garbled or empty output despite exit code 0, or a rejected `wire_api`
-   value), say so explicitly rather than guessing at a fix.
+   including the `wire_api=responses` override against xAI's API. With
+   current Codex/xAI behavior, this is expected to fail with the known
+   tool-schema 422 (`unknown variant namespace`), because Codex's Responses
+   API tool declaration does not match xAI's accepted shape. Report the
+   pass/fail result to the user plainly, including the log path on failure
+   so they can see what codex actually said. If the script reports the
+   known Codex/xAI incompatibility, do not retry with another model or
+   `wire_api=chat`; current Codex rejects `chat` at config-load time.
 
 5. Once the smoke test passes, tell the user setup is complete and they can
    use `/grok:review`, `/grok:adversarial-review`, and `/grok:rescue`. Also

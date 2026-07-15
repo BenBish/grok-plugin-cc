@@ -6,6 +6,30 @@ import crypto from "node:crypto";
 
 export class CodexNotFoundError extends Error {}
 
+const XAI_NAMESPACE_TOOL_ERROR =
+  /unknown variant [`'"]namespace[`'"][\s\S]*expected one of[\s\S]*[`'"]shell[`'"]/i;
+
+/**
+ * Codex and xAI both expose "Responses API" surfaces, but Codex currently
+ * serializes its agent tools with a `namespace` wrapper that xAI rejects.
+ * Keep this diagnosis close to the raw Codex runner so setup and runtime
+ * jobs report the same actionable failure.
+ *
+ * @param {string|null|undefined} errorDetail
+ * @returns {string|null}
+ */
+export function diagnoseKnownProviderFailure(errorDetail) {
+  if (typeof errorDetail !== "string") return null;
+  if (!XAI_NAMESPACE_TOOL_ERROR.test(errorDetail)) return null;
+  return [
+    "Codex/xAI Responses API tool-schema incompatibility: Codex reached xAI's /v1/responses endpoint,",
+    "but xAI rejected Codex's agent tool declaration (`type: namespace`). Current Codex rejects",
+    "`wire_api=chat`, so this plugin cannot run Grok reviews/rescues through Codex until Codex or",
+    "xAI supports a compatible tool schema.",
+    `Raw provider error: ${errorDetail}`,
+  ].join(" ");
+}
+
 export function checkCodexOnPath() {
   const result = spawnSync("codex", ["--version"], { encoding: "utf8" });
   if (result.error && /** @type {NodeJS.ErrnoException} */ (result.error).code === "ENOENT") {
