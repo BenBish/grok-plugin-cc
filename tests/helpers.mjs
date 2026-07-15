@@ -56,7 +56,6 @@ export function isolatedEnv({ withPluginConfig = true } = {}) {
     HOME: home,
     XDG_CONFIG_HOME: path.join(home, ".config"),
     XDG_STATE_HOME: path.join(home, ".local", "state"),
-    TEST_XAI_API_KEY: "test-key-not-a-real-secret",
   };
 
   if (withPluginConfig) {
@@ -65,10 +64,9 @@ export function isolatedEnv({ withPluginConfig = true } = {}) {
       path.join(configDir, "config.json"),
       JSON.stringify(
         {
-          baseURL: "https://api.x.ai/v1",
-          apiKeyEnvVar: "TEST_XAI_API_KEY",
-          models: [{ id: "test-model", name: "Test Model" }],
-          defaultModel: "test-model",
+          authMode: "grok-login",
+          models: [{ id: "grok-4.5", name: "Grok 4.5" }],
+          defaultModel: "grok-4.5",
           configuredAt: new Date().toISOString(),
         },
         null,
@@ -81,16 +79,16 @@ export function isolatedEnv({ withPluginConfig = true } = {}) {
 }
 
 /**
- * Write a fake `codex` executable and return the bin dir to prepend to
- * PATH. Behavior is controlled per-test via the FAKE_CODEX_MODE env var
- * (see tests/fake-codex.mjs for supported modes) so tests can exercise
+ * Write a fake `grok` executable and return the bin dir to prepend to
+ * PATH. Behavior is controlled per-test via the FAKE_GROK_MODE env var
+ * (see tests/fake-grok.mjs for supported modes) so tests can exercise
  * success, schema-invalid-then-valid, error, and adversarial rescue-edit
  * scenarios without a real model server.
  */
-export function fakeCodexBin() {
+export function fakeGrokBin() {
   const binDir = mkTmpDir("grok-plugin-fakebin-");
-  const fakeScript = fileURLToPath(new URL("./fake-codex.mjs", import.meta.url));
-  const shimPath = path.join(binDir, "codex");
+  const fakeScript = fileURLToPath(new URL("./fake-grok.mjs", import.meta.url));
+  const shimPath = path.join(binDir, "grok");
   fs.writeFileSync(shimPath, `#!/usr/bin/env node\nimport(${JSON.stringify(fakeScript)});\n`);
   fs.chmodSync(shimPath, 0o755);
   return binDir;

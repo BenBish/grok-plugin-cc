@@ -5,13 +5,13 @@ import { ensureDir, atomicWriteJson, readJsonSafe } from "./fs-utils.mjs";
 /**
  * Plugin config shape (written by /grok:setup):
  * {
- *   baseURL: string,       // defaults to https://api.x.ai/v1, overridable
- *   apiKeyEnvVar: string,  // name of an env var holding the xAI API key — never a literal secret, see codex-config.mjs
- *   models: [{ id, name }], defaultModel, configuredAt
+ *   authMode: "grok-login",
+ *   models: [{ id, name }],
+ *   defaultModel,
+ *   configuredAt
  * }
- * Unlike local-model-plugin-cc, there is no oss/custom split and no
- * localProvider/providerId — Grok is always the same single hosted
- * provider, so those fields don't exist here.
+ * Grok CLI owns authentication (`grok login`, or any environment it
+ * supports directly). This plugin stores no API key or API-key env var.
  */
 export function readPluginConfig() {
   return readJsonSafe(pluginConfigPath(), null);

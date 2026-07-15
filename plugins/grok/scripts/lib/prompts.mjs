@@ -24,20 +24,10 @@ line — do not guess line numbers. Only include findings you are grounded in
 real file content. If there is nothing worth flagging, return an empty
 findings array and verdict "approve".`;
 
-// codex exec review's native --uncommitted/--base flags can't be combined
-// with a custom prompt (confirmed: "the argument '--uncommitted' cannot be
-// used with '[PROMPT]'"), and codex exec review ignores --output-schema
-// entirely in favor of its own native "[P1] Title — file:line" text format
-// (confirmed empirically). So this plugin uses plain `codex exec` for
-// reviews, with the diff target described here in the prompt instead of as
-// a CLI flag, and does NOT pass --output-schema at all (see codex-run.mjs):
-// with it present, the model was observed to skip investigation entirely
-// and answer immediately (wrongly claiming no changes existed when they
-// did); without it, the same model reliably ran git status/diff first. The
-// explicit numbered "Step 1/2/3" structure below is what actually gets the
-// model to investigate before answering — schema conformance is enforced
-// by the JSON-shape instructions further down plus the broker's own
-// validate-and-retry logic, not by any CLI flag.
+// The diff target is described in the prompt instead of as a CLI flag so
+// review and adversarial-review can share one prompt/schema contract. The
+// explicit numbered Step 1/2/3 structure keeps the model grounded in git
+// status/diff before it emits the schema-shaped result.
 function targetInstruction(target) {
   if (target?.base) {
     return `Step 1: run \`git diff ${target.base}\` (and \`git status\` if useful) to see the actual changes between \`${target.base}\` and the current working tree, including uncommitted changes. Do not answer before doing this.`;

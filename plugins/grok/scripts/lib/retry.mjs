@@ -1,9 +1,7 @@
-// Capped retry/backoff for rate-limit-shaped `runCodex()` failures. Grok is
-// a paid hosted API with real rate limits, unlike local models, which
-// local-model-plugin-cc never needed to handle. `codex` only ever exposes
-// an exit code plus a last-error-message string (see codex-run.mjs) — never
-// a structured HTTP status — so classifying "was this a rate limit" is
-// necessarily a string-match heuristic, not something more principled.
+// Capped retry/backoff for rate-limit-shaped Grok CLI failures. The CLI
+// only gives this broker an exit code plus a last-error-message string, not
+// a structured HTTP status, so classifying "was this a rate limit" is
+// necessarily a string-match heuristic.
 const RATE_LIMIT_PATTERN = /429|rate.?limit|too many requests/i;
 
 /** @param {string|null} errorDetail */
@@ -16,12 +14,9 @@ function defaultDelay(ms) {
 }
 
 /**
- * Retries `runFn` (a synchronous call to `runCodex`, matching its own
- * synchronous `spawnSync`-based contract) when its result looks
- * rate-limit-shaped, with exponential backoff. Shares the caller's own
- * `deadline` — this does not get its own separate time budget, mirroring
- * the schema-invalid retry's deadline pattern already used for review jobs
- * in local-companion.mjs, deliberately reused rather than duplicated.
+ * Retries `runFn` when its result looks rate-limit-shaped, with
+ * exponential backoff. Shares the caller's own `deadline` — this does not
+ * get its own separate time budget.
  *
  * @template {{timedOut: boolean, exitCode: number|null, errorDetail: string|null}} T
  * @param {() => T} runFn
