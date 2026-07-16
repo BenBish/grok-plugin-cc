@@ -18,6 +18,33 @@ repo doesn't hardcode numbers that will drift. Rate-limit (429) errors are
 retried with capped exponential backoff (`lib/retry.mjs`) — a heuristic
 string match on the Grok CLI error text.
 
+## Install (Claude Code)
+
+This repo is its own Claude Code marketplace. Marketplace name and plugin
+name are both `grok` (see `.claude-plugin/marketplace.json`). Install from
+**this** repository — not from `agent-skills-plugin`:
+
+```text
+/plugin marketplace add BenBish/grok-plugin-cc
+/plugin install grok@grok
+```
+
+That registers marketplace `grok` and installs the `grok` plugin, which
+exposes the `/grok:*` commands below. Then install the
+[Grok Build CLI](https://docs.x.ai/build/overview), run `grok login` (or
+another auth method the CLI supports), and finish with `/grok:setup`.
+
+### Not this plugin: shared agent-skills
+
+[`BenBish/agent-skills-plugin`](https://github.com/BenBish/agent-skills-plugin)
+is a **separate** marketplace for portable contributor workflow skills
+(`issue`, `work`, `mr`, …). It is optional if you contribute to this repo,
+and it is **not** how you get `/grok:*`. Do not use
+`/plugin marketplace add BenBish/agent-skills-plugin` when installing the
+Grok plugin — that path targets a different product and can hit Claude
+Code's reserved `agent-skills` marketplace-name error if the marketplace
+identity is wrong.
+
 ## Commands
 
 - `/grok:setup` — configure the Grok Build CLI model and smoke-test the
@@ -37,6 +64,7 @@ string match on the Grok CLI error text.
 - The [Grok Build CLI](https://docs.x.ai/build/overview) on `PATH`
 - A working `grok login` session, or another auth method supported directly
   by the Grok CLI
+- Claude Code, with this plugin installed as above
 
 ## Verify before relying on this
 
@@ -60,9 +88,10 @@ model id. It does not store API keys.
 - `tests/` — `node --test` suite, including a fake `grok` binary fixture
   so CI never needs a live xAI account.
 - `CLAUDE.md` / `AGENTS.md` — project spec consumed by coding agents.
-- `.agents/skills/` — portable Agent Skills for *contributing to this repo*
-  (issue, work, mr, merge, test, manual, create-skill, etc.), unrelated to
-  the plugin's own runtime; symlinked at `.claude/skills/` for Claude Code.
+- `.agents/skills/` — optional local copies of portable Agent Skills for
+  *contributors to this repo* (issue, work, mr, …). Unrelated to the
+  shipped `/grok:*` plugin; end users install via the **Install** section
+  above, not via `agent-skills-plugin`.
 - `.codex/config.toml` — Codex project config, including Linear MCP.
 - `.mcp.json` — generic MCP server config for clients that still read it.
 - `.github/` — CI/workflow configuration.
