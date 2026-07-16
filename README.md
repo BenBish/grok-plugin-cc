@@ -15,8 +15,9 @@ specifically asks for confirmation before running, since it can take up to
 15 minutes of billed agentic work. See
 [xAI's pricing page](https://docs.x.ai/docs/pricing) for current rates; this
 repo doesn't hardcode numbers that will drift. Rate-limit (429) errors are
-retried with capped exponential backoff (`lib/retry.mjs`) — a heuristic
-string match on the Grok CLI error text.
+retried with capped exponential backoff
+(`plugins/grok/scripts/lib/retry.mjs`) — a heuristic string match on the
+Grok CLI error text.
 
 ## Install (Claude Code)
 
@@ -118,11 +119,12 @@ official Grok Build CLI instead.
 
 ## Conventions
 
-- **Branches**: `feature/<issue-number>-brief-slug` from `main`
+- **Branches**: `<linear-key>-brief-slug` from `main` (e.g.
+  `BSH-29-fix-claude-plugin-install-instructions`)
 - **Commits**: [Conventional Commits](https://www.conventionalcommits.org/)
   (`feat(scope): description`, `fix(scope): description`, etc.)
-- **PRs**: reference the issue with `Resolves #N`; one squashed semantic
-  commit per PR
+- **PRs**: reference the Linear issue with `Resolves BSH-N` (or the issue
+  URL); one squashed semantic commit per PR
 
 See `CLAUDE.md` for the full set of project instructions used by coding
 agents working in this repo.

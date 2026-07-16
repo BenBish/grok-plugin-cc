@@ -40,19 +40,19 @@ tests/                                   # node --test suite incl. fake-grok CLI
 ## Known open risks (see plugins/grok/skills/grok-runtime/SKILL.md for detail)
 
 - `--sandbox read-only` did not block writes during local spike testing of the `grok` CLI; review safety relies on explicit deny rules for write/edit tools plus prompt instructions, not the sandbox flag alone.
-- The rate-limit retry heuristic (`scripts/lib/retry.mjs`) is a string match on the `grok` CLI's error text, not a structured HTTP status code.
+- The rate-limit retry heuristic (`plugins/grok/scripts/lib/retry.mjs`) is a string match on the `grok` CLI's error text, not a structured HTTP status code.
 - This plugin previously tried routing Grok through Codex provider overrides; that path is abandoned (xAI rejected Codex's Responses API tool schema) and should not be reintroduced without proof that's fixed.
 
 ## Conventions
 
 ### Branches
-`feature/<issue-number>-brief-slug` from `main`
+`<linear-key>-brief-slug` from `main` (e.g. `BSH-29-fix-claude-plugin-install-instructions`)
 
 ### Commits
 Conventional Commits: `feat(scope): description`, `fix(scope): description`, `docs: description`, `chore: description`
 
 ### PRs
-- Reference the issue with `Resolves #N`
+- Reference the Linear issue with `Resolves BSH-N` (or the issue URL)
 - One squashed semantic commit per PR
 
 ## Do Not Commit
