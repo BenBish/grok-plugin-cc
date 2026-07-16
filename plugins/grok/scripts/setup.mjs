@@ -33,7 +33,12 @@ function smokeTimeoutMs() {
   const raw = process.env.GROK_SMOKE_TIMEOUT_MS;
   if (raw === undefined || raw === "") return DEFAULT_SMOKE_TIMEOUT_MS;
   const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_SMOKE_TIMEOUT_MS;
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    console.error(
+      `Warning: GROK_SMOKE_TIMEOUT_MS=${JSON.stringify(raw)} is not a positive number; using default ${DEFAULT_SMOKE_TIMEOUT_MS}ms.`,
+    );
+    return DEFAULT_SMOKE_TIMEOUT_MS;
+  }
   return parsed;
 }
 
@@ -148,7 +153,7 @@ async function cmdSmokeTest() {
     if (response.ok !== true) throw new Error("missing ok:true");
   } catch {
     console.error(
-      `Smoke test failed: Grok returned malformed smoke-test output (CLI finished within ${timeoutMs}ms, but response was not {"ok":true}).\nFull log: ${logPath}`,
+      `Smoke test failed: Grok returned malformed smoke-test output (CLI finished within ${timeoutMs}ms, but response was not valid {"ok":true} JSON).\nFull log: ${logPath}`,
     );
     process.exit(1);
   }

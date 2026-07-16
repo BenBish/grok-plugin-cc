@@ -133,8 +133,10 @@ function main() {
       break;
     }
     case "sleep": {
-      // Hold the process open so spawnSync timeout handling can be tested.
-      // Duration is controlled by FAKE_GROK_SLEEP_MS (default 60s).
+      // Hold the process open so spawnSync's timeout can SIGTERM this process
+      // (runGrok treats signal SIGTERM + timeoutMs as timedOut). Duration is
+      // controlled by FAKE_GROK_SLEEP_MS (default 60s). If not killed, exits
+      // successfully after the wait so a too-generous budget still passes.
       const sleepMs = Number(process.env.FAKE_GROK_SLEEP_MS ?? "60000");
       const ms = Number.isFinite(sleepMs) && sleepMs > 0 ? sleepMs : 60_000;
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);

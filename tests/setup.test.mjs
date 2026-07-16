@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fakeGrokBin, isolatedEnv, runNode, runNodeExpectFailure } from "./helpers.mjs";
+import { spawnSync } from "node:child_process";
+import path from "node:path";
+import { fakeGrokBin, isolatedEnv, runNode, runNodeExpectFailure, SCRIPTS_DIR } from "./helpers.mjs";
 
 // setup.mjs's real `smoke-test` command makes network/process calls, but
 // the fake-grok fixture lets us cover deterministic CLI diagnostics
@@ -8,6 +10,22 @@ import { fakeGrokBin, isolatedEnv, runNode, runNodeExpectFailure } from "./helpe
 
 function freshEnv() {
   return isolatedEnv({ withPluginConfig: false }).env;
+}
+
+/** Capture stdout+stderr on success (runNode only returns stdout). */
+function runNodeCapture(scriptRelPath, args, { env }) {
+  const result = spawnSync(process.execPath, [path.join(SCRIPTS_DIR, scriptRelPath), ...args], {
+    env,
+    encoding: "utf8",
+  });
+  if (result.status !== 0) {
+    throw Object.assign(new Error(`expected success, exit ${result.status}: ${result.stderr}`), {
+      status: result.status,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    });
+  }
+  return { stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
 }
 
 test("list-models: returns the fixed Grok model catalog", () => {
@@ -67,6 +85,50 @@ test("smoke-test: hard timeout is reported distinctly from malformed JSON", () =
   assert.match(stderr, /hard process budget/);
   assert.match(stderr, /GROK_SMOKE_TIMEOUT_MS/);
   assert.doesNotMatch(stderr, /malformed smoke-test output/);
+});
+
+test("smoke-test: invalid GROK_SMOKE_TIMEOUT_MS warns and falls back to default", () => {
+  const env = {
+    ...freshEnv(),
+    PATH: `${fakeGrokBin()}:${process.env.PATH}`,
+    FAKE_GROK_MODE: "smoke-ok",
+    GROK_SMOKE_TIMEOUT_MS: "not-a-number",
+  };
+  runNode("setup.mjs", ["configure"], { env });
+
+  const { stdout, stderr } = runNodeCapture("setup.mjs", ["smoke-test"], { env });
+  assert.match(stdout, /Smoke test passed/);
+  assert.match(stderr, /Warning: GROK_SMOKE_TIMEOUT_MS="not-a-number"/);
+  assert.match(stderr, /using default 120000ms/);
+});
+
+test("smoke-test: empty GROK_SMOKE_TIMEOUT_MS uses default without warning", () => {
+  const env = {
+    ...freshEnv(),
+    PATH: `${fakeGrokBin()}:${process.env.PATH}`,
+    FAKE_GROK_MODE: "smoke-ok",
+    GROK_SMOKE_TIMEOUT_MS: "",
+  };
+  runNode("setup.mjs", ["configure"], { env });
+
+  const { stdout, stderr } = runNodeCapture("setup.mjs", ["smoke-test"], { env });
+  assert.match(stdout, /Smoke test passed/);
+  assert.doesNotMatch(stderr, /Warning: GROK_SMOKE_TIMEOUT_MS/);
+});
+
+test("smoke-test: non-positive GROK_SMOKE_TIMEOUT_MS warns and falls back", () => {
+  const env = {
+    ...freshEnv(),
+    PATH: `${fakeGrokBin()}:${process.env.PATH}`,
+    FAKE_GROK_MODE: "smoke-ok",
+    GROK_SMOKE_TIMEOUT_MS: "0",
+  };
+  runNode("setup.mjs", ["configure"], { env });
+
+  const { stdout, stderr } = runNodeCapture("setup.mjs", ["smoke-test"], { env });
+  assert.match(stdout, /Smoke test passed/);
+  assert.match(stderr, /Warning: GROK_SMOKE_TIMEOUT_MS="0"/);
+  assert.match(stderr, /using default 120000ms/);
 });
 
 test("configure: a --model display name containing '=' is not truncated", () => {
