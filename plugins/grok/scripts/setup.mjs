@@ -21,6 +21,22 @@ import { checkGrokOnPath, runGrok, GrokNotFoundError } from "./lib/grok-run.mjs"
 import { jobLogPath } from "./lib/job-store.mjs";
 import { DEFAULT_MODEL_ID, GROK_MODELS } from "./lib/models.mjs";
 
+// Smoke exercises the same broker flags review/rescue use (--cwd, sandbox,
+// configured model). Cold first calls can exceed 30s even when a minimal raw
+// `grok -p` smoke succeeds; default is 120s, override with GROK_SMOKE_TIMEOUT_MS.
+const DEFAULT_SMOKE_TIMEOUT_MS = 120_000;
+
+/**
+ * @returns {number}
+ */
+function smokeTimeoutMs() {
+  const raw = process.env.GROK_SMOKE_TIMEOUT_MS;
+  if (raw === undefined || raw === "") return DEFAULT_SMOKE_TIMEOUT_MS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_SMOKE_TIMEOUT_MS;
+  return parsed;
+}
+
 function displayNameForModel(id) {
   return id
     .split(/[-_]/)
@@ -102,18 +118,25 @@ async function cmdSmokeTest() {
   }
 
   const logPath = jobLogPath("setup-smoke-test", `smoke-${Date.now()}`);
+  const timeoutMs = smokeTimeoutMs();
+  // Intentionally uses broker flags (cwd, sandbox, model) rather than the
+  // minimal README raw smoke — setup must verify the path real jobs take.
   const result = runGrok({
     dir: process.cwd(),
     prompt: 'Reply with exactly the JSON object {"ok":true}.',
     logPath,
-    timeoutMs: 30_000,
+    timeoutMs,
     model: config.defaultModel,
     maxTurns: 1,
     sandbox: "read-only",
   });
 
   if (result.timedOut) {
-    console.error(`Smoke test timed out. Full log: ${logPath}`);
+    console.error(
+      `Smoke test timed out after ${timeoutMs}ms (hard process budget; not a malformed-JSON failure). ` +
+        `A minimal raw \`grok -p\` call may still succeed if only this budget is too tight — ` +
+        `raise GROK_SMOKE_TIMEOUT_MS if needed.\nFull log: ${logPath}`,
+    );
     process.exit(1);
   }
   if (result.exitCode !== 0) {
@@ -124,7 +147,9 @@ async function cmdSmokeTest() {
     const response = JSON.parse(result.text ?? "");
     if (response.ok !== true) throw new Error("missing ok:true");
   } catch {
-    console.error(`Smoke test failed: Grok returned malformed smoke-test output.\nFull log: ${logPath}`);
+    console.error(
+      `Smoke test failed: Grok returned malformed smoke-test output (CLI finished within ${timeoutMs}ms, but response was not {"ok":true}).\nFull log: ${logPath}`,
+    );
     process.exit(1);
   }
   console.log(`Smoke test passed. Grok responded. Full log: ${logPath}`);

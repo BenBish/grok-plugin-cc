@@ -34,10 +34,12 @@ port. This plugin uses the installed `grok` CLI and its own login state.
    node "${CLAUDE_PLUGIN_ROOT}/scripts/setup.mjs" smoke-test
    ```
    This requires the `grok` CLI to be on `PATH` and logged in. The script
-   sends a trivial prompt through `grok -p --output-format json` to confirm
-   the whole path works end to end. Report the pass/fail result plainly,
+   sends a trivial prompt through the same broker path real jobs use
+   (`grok -p --cwd --sandbox read-only -m <defaultModel> --output-format
+   json`), not the minimal raw README smoke. Default budget is 120s
+   (override with `GROK_SMOKE_TIMEOUT_MS`). Report pass/fail plainly,
    including the log path on failure so the user can see what `grok`
-   actually said.
+   actually said. Distinguish hard timeout vs malformed response.
 
 5. Once the smoke test passes, tell the user setup is complete and they can
    use `/grok:review`, `/grok:adversarial-review`, and `/grok:rescue`. Also

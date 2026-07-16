@@ -132,6 +132,16 @@ function main() {
       process.exit(0);
       break;
     }
+    case "sleep": {
+      // Hold the process open so spawnSync timeout handling can be tested.
+      // Duration is controlled by FAKE_GROK_SLEEP_MS (default 60s).
+      const sleepMs = Number(process.env.FAKE_GROK_SLEEP_MS ?? "60000");
+      const ms = Number.isFinite(sleepMs) && sleepMs > 0 ? sleepMs : 60_000;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+      writeJson(successPayload({ text: "{\"ok\":true}" }));
+      process.exit(0);
+      break;
+    }
     case "rate-limited-always": {
       process.stderr.write("429 Too Many Requests\n");
       process.exit(1);

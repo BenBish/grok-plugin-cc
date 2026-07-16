@@ -49,6 +49,24 @@ test("smoke-test: malformed grok output is rejected", () => {
 
   const { stderr } = runNodeExpectFailure("setup.mjs", ["smoke-test"], { env: envWithFake });
   assert.match(stderr, /malformed JSON/);
+  assert.doesNotMatch(stderr, /timed out after/);
+});
+
+test("smoke-test: hard timeout is reported distinctly from malformed JSON", () => {
+  const env = {
+    ...freshEnv(),
+    PATH: `${fakeGrokBin()}:${process.env.PATH}`,
+    FAKE_GROK_MODE: "sleep",
+    FAKE_GROK_SLEEP_MS: "5000",
+    GROK_SMOKE_TIMEOUT_MS: "200",
+  };
+  runNode("setup.mjs", ["configure"], { env });
+
+  const { stderr } = runNodeExpectFailure("setup.mjs", ["smoke-test"], { env });
+  assert.match(stderr, /timed out after 200ms/);
+  assert.match(stderr, /hard process budget/);
+  assert.match(stderr, /GROK_SMOKE_TIMEOUT_MS/);
+  assert.doesNotMatch(stderr, /malformed smoke-test output/);
 });
 
 test("configure: a --model display name containing '=' is not truncated", () => {

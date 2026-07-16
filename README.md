@@ -49,8 +49,11 @@ grok -p 'Reply with exactly the JSON object {"ok":true}.' \
   --no-auto-update
 ```
 
-`/grok:setup` automates the same path and stores only the selected CLI
-model id. It does not store API keys.
+`/grok:setup` smoke-tests a slightly fuller broker path (adds `--cwd`,
+`--sandbox read-only`, and the configured `-m`) so setup validates what
+review/rescue actually spawn. Default smoke budget is 120s; raise it with
+`GROK_SMOKE_TIMEOUT_MS` if cold starts time out. Setup stores only the
+selected CLI model id. It does not store API keys.
 
 ## What's here
 
