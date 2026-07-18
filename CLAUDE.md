@@ -10,7 +10,7 @@
 - **Language/Runtime**: Node.js >=20, plain `.mjs` (no build step — shipped scripts must run as-is since Claude Code installs the plugin directly from this git repo)
 - **Framework**: none — Claude Code plugin manifest conventions (`.claude-plugin/`, `commands/*.md`, `agents/*.md`)
 - **Database**: none — the job ledger is flat JSON files under the user's XDG state dir, never inside a target repo. No config file is generated for the `grok` CLI either — model selection is passed as a CLI flag on every invocation.
-- **Package manager**: npm for `devDependencies` (TypeScript, used only for `tsc --noEmit` type-checking of the `.mjs` sources via JSDoc). Nothing shipped in `plugins/grok/` may assume bun is installed on an end user's machine, even though the starter template this repo was scaffolded from defaults to bun.
+- **Package manager**: npm for `devDependencies` (TypeScript, used only for `tsc --noEmit` type-checking of the `.mjs` sources via JSDoc). Nothing shipped in `plugins/grok/` may assume bun is installed on an end user's machine.
 
 ## Commands
 
@@ -59,4 +59,6 @@ Conventional Commits: `feat(scope): description`, `fix(scope): description`, `do
 
 - `.env`, `.env.local`, any secrets or credentials
 - `.claude/settings.local.json`
+- Personal agent tooling: `.agents/`, `.claude/skills`, `.codex/`, `.mcp.json`
+  (portable skills belong in a user-level plugin, not this public repo)
 - Build artefacts (`dist/`, `build/`, `.next/`, `node_modules/`)

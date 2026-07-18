@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   validate:
-    name: Validate skills and config
+    name: Validate plugin and config
     runs-on: ubuntu-latest
 
     steps:
@@ -54,13 +54,44 @@ jobs:
           exit(failed ? 1 : 0)
           RUBY
 
-      - name: Validate Agent Skills
+      - name: Forbid vendored portable skills and personal tooling
+        run: |
+          failed=0
+          # Match .gitignore / docs: ban the entire .agents tree, not only skills/
+          if [ -e .agents ] || [ -n "$(git ls-files '.agents' '.agents/**' 2>/dev/null)" ]; then
+            echo "::error::Do not vendor portable agent tooling under .agents/; use a user-level skills plugin"
+            find .agents -maxdepth 3 2>/dev/null || true
+            git ls-files '.agents' '.agents/**' 2>/dev/null || true
+            failed=1
+          fi
+          if [ -e .claude/skills ]; then
+            echo "::error::Do not ship .claude/skills in this public plugin repo"
+            ls -la .claude/skills
+            failed=1
+          fi
+          if [ -e .mcp.json ]; then
+            echo "::error::Do not commit .mcp.json (personal MCP wiring)"
+            failed=1
+          fi
+          if [ -d .codex ] || [ -e .codex ]; then
+            echo "::error::Do not commit .codex/ (personal Codex config)"
+            find .codex -maxdepth 2 2>/dev/null || true
+            failed=1
+          fi
+          if [ -d .claude/commands ]; then
+            echo "::error::.claude/commands should not be reintroduced; plugin commands live under plugins/*/commands/"
+            find .claude/commands -maxdepth 2 -type f
+            failed=1
+          fi
+          exit "$failed"
+
+      - name: Validate plugin skills
         run: |
           ruby <<'RUBY'
           require "yaml"
 
-          skill_dirs = Dir.glob(".agents/skills/*").select { |path| File.directory?(path) }.sort
-          abort "no skills found under .agents/skills" if skill_dirs.empty?
+          skill_dirs = Dir.glob("plugins/*/skills/*").select { |path| File.directory?(path) }.sort
+          abort "no plugin skills found under plugins/*/skills/" if skill_dirs.empty?
 
           failed = false
 
@@ -107,7 +138,7 @@ jobs:
               failed = true
             end
 
-            # Ignore fenced examples so portable templates can mention example paths.
+            # Ignore fenced examples so skill docs can mention example paths.
             searchable = text.gsub(/```.*?```/m, "")
             searchable.scan(/`((?:references|scripts|assets)\/[^`\s]+)`/) do |match_path|
               relative_path = match_path.first
@@ -118,6 +149,7 @@ jobs:
               failed = true
             end
 
+            # Optional Codex metadata: only enforce when present.
             openai_file = File.join(dir, "agents", "openai.yaml")
             if File.file?(openai_file)
               begin
@@ -133,19 +165,11 @@ jobs:
               end
             end
 
-            puts "skill ok: #{expected_name}"
+            puts "skill ok: #{dir}"
           end
 
           exit(failed ? 1 : 0)
           RUBY
-
-      - name: Prevent Claude command regression
-        run: |
-          if [ -d .claude/commands ]; then
-            echo "::error::.claude/commands should not be reintroduced; use .agents/skills instead"
-            find .claude/commands -maxdepth 2 -type f
-            exit 1
-          fi
 
       - name: Validate plugin commands and agents
         run: |
