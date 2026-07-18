@@ -88,17 +88,16 @@ selected CLI model id. It does not store API keys.
 
 - `.claude-plugin/marketplace.json`, `plugins/grok/` — the Claude Code
   plugin itself (manifest, commands, rescue subagent, broker scripts,
-  findings schema).
+  findings schema, and the product skill `skills/grok-runtime/`).
 - `tests/` — `node --test` suite, including a fake `grok` binary fixture
   so CI never needs a live xAI account.
 - `CLAUDE.md` / `AGENTS.md` — project spec consumed by coding agents.
-- `.agents/skills/` — optional local copies of portable Agent Skills for
-  *contributors to this repo* (issue, work, mr, …). Unrelated to the
-  shipped `/grok:*` plugin; end users install via the **Install** section
-  above, not via `agent-skills-plugin`.
-- `.codex/config.toml` — Codex project config, including Linear MCP.
-- `.mcp.json` — generic MCP server config for clients that still read it.
 - `.github/` — CI/workflow configuration.
+
+Portable contributor skills (`issue`, `work`, `mr`, …) are **not** vendored
+in this repository. Install them separately from
+[`BenBish/agent-skills-plugin`](https://github.com/BenBish/agent-skills-plugin)
+if you want that workflow when contributing.
 
 ## Relationship to local-model-plugin-cc
 
