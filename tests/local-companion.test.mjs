@@ -70,8 +70,24 @@ test("review: uses headless grok with schema output and denied write tools", () 
   assert.equal(invocation.args.sandbox, "read-only");
   assert.equal(invocation.args.permissionMode, "bypassPermissions");
   assert.deepEqual(invocation.args.deny, ["Write(*)", "Edit(*)"]);
+  assert.equal(invocation.args.maxTurns, "12");
   assert.ok(invocation.args.jsonSchema);
   assert.match(invocation.args.prompt, /git status/);
+});
+
+test("adversarial review: uses the shared turn allowance on initial and schema-retry attempts", () => {
+  const repo = initGitRepo();
+  const env = envWithFakeGrok("invalid-then-valid");
+  const recordPath = path.join(mkTmpDir("record-"), "record.jsonl");
+  env.FAKE_GROK_RECORD_PATH = recordPath;
+  runNode("local-companion.mjs", ["adversarial-review", "--focus", "concurrency"], { cwd: repo, env });
+  const invocations = fs
+    .readFileSync(recordPath, "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+  assert.equal(invocations.length, 2);
+  assert.ok(invocations.every((invocation) => invocation.args.maxTurns === "12"));
 });
 
 test("review: --base <ref> is described in the prompt", () => {
@@ -122,6 +138,7 @@ test("rescue: uses headless grok under a workspace sandbox", () => {
   assert.equal(invocation.args.sandbox, "workspace");
   assert.equal(invocation.args.permissionMode, "bypassPermissions");
   assert.equal(invocation.args.cwd, repo);
+  assert.equal(invocation.args.maxTurns, "12");
 });
 
 test("rescue: no task text is rejected before invoking grok", () => {
