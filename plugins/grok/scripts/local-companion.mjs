@@ -39,7 +39,7 @@ const RETRY_BASE_DELAY_MS = process.env.GROK_RETRY_BASE_DELAY_MS
   ? Number(process.env.GROK_RETRY_BASE_DELAY_MS)
   : 2000;
 
-const REVIEW_MAX_TURNS = 6;
+const REVIEW_MAX_TURNS = 12;
 const RESCUE_MAX_TURNS = 12;
 const REVIEW_DENY_RULES = ["Write(*)", "Edit(*)"];
 const REVIEW_SCHEMA = fs.readFileSync(
@@ -86,7 +86,6 @@ async function runReviewJob({ job, repoRoot, repoIdValue, kind, args, config }) 
     kind === "adversarial-review"
       ? buildAdversarialReviewPrompt(job.target, args.focus)
       : buildReviewPrompt(job.target);
-
   // Shared across the initial call, its rate-limit retries, and the
   // schema-invalid retry below, so all of them together can never exceed
   // REVIEW_TIMEOUT_MS — previously each call got its own full budget, so a

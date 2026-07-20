@@ -31,7 +31,8 @@ resolved git-root identity.
 2. Load plugin config written by `/grok:setup`; default model is the first
    model discovered from `grok models`, falling back to `grok-4.5`.
 3. Spawn `grok -p <prompt> --cwd <repo> --output-format json --max-turns
-   <n> --no-auto-update` with mode-specific sandbox/schema flags.
+   <n> --no-auto-update` with mode-specific sandbox/schema flags. Review,
+   adversarial-review, and rescue jobs each allow 12 turns.
 4. Parse the single JSON stdout object from Grok. For reviews, prefer
    `structuredOutput`; fall back to parsing JSON from `text`.
 5. Validate review output against `schemas/review-output.schema.json`.
